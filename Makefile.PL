@@ -3,9 +3,12 @@
 
 use ExtUtils::MakeMaker;
 
+# Touch CHANGES so it exists.
+open(CHANGES, ">>CHANGES") and close CHANGES;
+
 WriteMakefile
   ( NAME         => 'POE::Component::Client::Ping',
-    AUTHOR       => 'Rocco Caputo <troc+poe@netrus.net>',
+    AUTHOR       => 'Rocco Caputo <rcaputo@cpan.org>',
     ABSTRACT     => 'POE component for non-blocking/concurrent ICMP ping.',
     VERSION_FROM => 'Ping.pm',
 
@@ -13,7 +16,11 @@ WriteMakefile
     PREREQ_PM    => { POE         => 0.11,
                       Time::HiRes => 1.20,
                     },
-    dist         => { COMPRESS    => 'gzip -9f',
-                      SUFFIX      => 'gz',
-                    },
+    dist         =>
+    { COMPRESS   => 'gzip -9f',
+      SUFFIX     => 'gz',
+      PREOP      => ( 'cvs-log.perl | ' .
+                      'tee ./$(DISTNAME)-$(VERSION)/CHANGES > ./CHANGES'
+                    ),
+    },
   );
