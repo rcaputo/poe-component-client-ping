@@ -13,7 +13,7 @@ use Exporter;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = '0.98';
+$VERSION = '0.99';
 
 use Carp qw(croak);
 use Symbol qw(gensym);
@@ -341,8 +341,32 @@ sub poco_ping_pong {
     ( inet_ntoa($from_ip), $trip_time, $now
     );
 
-  # clear the timer
-  $kernel->delay($from_seq) if $heap->{onereply};
+  # It's a single-reply ping.  Clean up after it.
+  # TODO - This is a lot like the cleanup in poco_ping_default().
+  # Consider combining both if it makes sense.
+  if ($heap->{onereply}) {
+    # Clear the timer.
+    $kernel->delay($from_seq);
+
+    # Delete the ping information.  Cache a copy for other cleanup.
+    my $ping_info = delete $heap->{ping_by_seq}->{$seq};
+
+    # Stop mapping the session+address to this sequence number.
+    delete(
+      $heap->{addr_to_seq}->
+      {$ping_info->[PBS_SESSION]}->{$ping_info->[PBS_ADDRESS]}
+    );
+
+    # Stop tracking the session if that was the last address.
+    delete $heap->{addr_to_seq}->{$ping_info->[PBS_SESSION]}
+      unless scalar(keys %{$heap->{addr_to_seq}->{$ping_info->[PBS_SESSION]}});
+
+    # Close the socket if there are no sessions waiting for responses.
+    unless (scalar(keys %{$heap->{ping_by_seq}}) || $heap->{keep_socket}) {
+      DEBUG_SOCKET and warn "closing the raw icmp socket";
+      $kernel->select_read( delete $heap->{socket_handle} );
+    }
+  }
 }
 
 # Default's used to catch ping timeouts, which are named after the
