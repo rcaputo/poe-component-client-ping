@@ -15,7 +15,7 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS);
   RES_ROUNDTRIP RES_TIME
 );
 %EXPORT_TAGS = (
-  'const' => [
+  const => [
     qw(
       REQ_ADDRESS REQ_TIMEOUT REQ_TIME REQ_USER_ARGS RES_ADDRESS
       RES_ROUNDTRIP RES_TIME
@@ -24,7 +24,7 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS);
 );
 
 use vars qw($VERSION);
-$VERSION = '1.02';
+$VERSION = '1.03';
 
 use Carp qw(croak);
 use Symbol qw(gensym);
@@ -48,10 +48,10 @@ sub spawn {
   my %params = @_;
 
   croak "$type requires root privilege"
-    if $> and ($^O ne 'VMS') and not defined $params{Socket};
+    if $> and ($^O ne "VMS") and not defined $params{Socket};
 
   my $alias = delete $params{Alias};
-  $alias = 'pinger' unless defined $alias and length $alias;
+  $alias = "pinger" unless defined $alias and length $alias;
 
   my $timeout = delete $params{Timeout};
   $timeout = 1 unless defined $timeout and $timeout >= 0;
@@ -217,10 +217,18 @@ sub poco_ping_ping {
   # Return failure if an address was not resolvable.  This simulates
   # the postback behavior.
   unless (defined $usable_address) {
-    $kernel->post( $sender, $event,
-                   [ $address, $timeout, time() ],
-                   [ undef, undef, time() ],
-                 );
+    $kernel->post(
+      $sender, $event,
+      [ $address,    # REQ_ADDRESS
+        $timeout,    # REQ_TIMEOUT
+        time(),      # REQ_TIME
+        @user_args,  # REQ_USER_ARGS
+      ],
+      [ undef,   # RES_ADDRESS
+        undef,   # RES_ROUNDTRIP
+        time(),  # RES_TIME
+      ],
+    );
     _check_for_close($kernel, $heap);
     return;
   }
@@ -229,10 +237,18 @@ sub poco_ping_ping {
 
   # Send the packet.  If send() fails, then we bail with an error.
   unless (send($heap->{socket_handle}, $msg, ICMP_FLAGS, $socket_address)) {
-    $kernel->post( $sender, $event,
-                   [ $address, $timeout, time() ],
-                   [ undef, undef, time() ],
-                 );
+    $kernel->post(
+      $sender, $event,
+      [ $address,    # REQ_ADDRESS
+        $timeout,    # REQ_TIMEOUT
+        time(),      # REQ_TIME
+        @user_args,  # REQ_USER_ARGS
+      ],
+      [ undef,   # RES_ADDRESS
+        undef,   # RES_ROUNDTRIP
+        time(),  # RES_TIME
+      ],
+    );
     _check_for_close($kernel, $heap);
     return;
   }
@@ -243,7 +259,13 @@ sub poco_ping_ping {
   DEBUG_PBS and warn "recording ping_by_seq($master_seq)";
   $heap->{ping_by_seq}->{$master_seq} = [
     # PBS_POSTBACK
-    $sender->postback($event, $address, $timeout, time(), @user_args),
+    $sender->postback(
+      $event,
+      $address,    # REQ_ADDRESS
+      $timeout,    # REQ_TIMEOUT
+      time(),      # REQ_TIME
+      @user_args,  # REQ_USER_ARGS
+    ),
     "$sender",   # PBS_SESSION (stringified to weaken reference)
     $address,    # PBS_ADDRESS
     time()       # PBS_REQUEST_TIME
@@ -336,11 +358,13 @@ sub poco_ping_pong {
   my ($from_port, $from_ip) = unpack_sockaddr_in($from_saddr);
 
   # Unpack the packet itself.
-  my ( $from_type, $from_subcode,
-       $from_checksum, $from_pid, $from_seq, $from_message
-     )  = unpack( ICMP_STRUCT . $heap->{data_size},
-                  substr($recv_message, -$heap->{message_length})
-                );
+  my (
+    $from_type, $from_subcode,
+    $from_checksum, $from_pid, $from_seq, $from_message
+  )  = unpack(
+    ICMP_STRUCT . $heap->{data_size},
+    substr($recv_message, -$heap->{message_length})
+  );
 
   DEBUG and do {
     warn ",----- packet from ", inet_ntoa($from_ip), ", port $from_port\n";
@@ -447,69 +471,72 @@ __END__
 
 =head1 NAME
 
-POE::Component::Client::Ping - an ICMP ping client component
+POE::Component::Client::Ping - a non-blocking ICMP ping client
 
 =head1 SYNOPSIS
 
   use POE qw(Component::Client::Ping);
 
   POE::Component::Client::Ping->spawn(
-    Alias     => 'pingthing',  # defaults to 'pinger'
+    Alias     => "pingthing",  # defaults to "pinger"
     Timeout   => 10,           # defaults to 1 second
     OneReply  => 1             # defaults to disabled
   );
 
   sub some_event_handler {
-    $kernel->post( 'pingthing', # Post the request to the 'pingthing'.
-                   'ping',      # Ask it to 'ping' an address.
-                   'pong',      # Have it post an answer to my 'pong' state.
-                   $address,    # This is the address we want to ping.
-                   $timeout,    # Optional timeout.  It overrides the default.
-                 );
+    $kernel->post(
+      "pingthing", # Post the request to the "pingthing" component.
+      "ping",      # Ask it to "ping" an address.
+      "pong",      # Have it post an answer as a "pong" event.
+      $address,    # This is the address we want to ping.
+      $timeout,    # Optional timeout.  It overrides the default.
+    );
   }
 
-  # This is the sub which is called when the session receives a 'pong'
+  # This is the sub which is called when the session receives a "pong"
   # event.  It handles responses from the Ping component.
   sub got_pong {
-    my ($request_packet, $response_packet) = @_[ARG0, ARG1];
+    my ($request, $response) = @_[ARG0, ARG1];
 
-    my ($req_address, $req_timeout, $req_time)      = @{$request_packet};
-    my ($resp_address, $roundtrip_time, $resp_time) = @{$response_packet};
+    my ($req_address, $req_timeout, $req_time)      = @$request;
+    my ($resp_address, $roundtrip_time, $resp_time) = @$response;
 
     # The response address is defined if this is a response.
-    # Otherwise, an undefined response address indicates that the
-    # timeout period has ended.
     if (defined $resp_address) {
-      printf( "ping to %-15.15s at %10d. pong from %-15.15s in %6.3f s\n",
-              $req_address, $req_time,
-              $resp_address, $roundtrip_time
-            );
+      printf(
+        "ping to %-15.15s at %10d. pong from %-15.15s in %6.3f s\n",
+        $req_address, $req_time,
+        $resp_address, $roundtrip_time,
+      );
+      return;
     }
-    else {
-      printf( "ping to %-15.15s is done.\n",
-              $req_address
-            );
-    }
+
+    # Otherwise the timeout period has ended.
+    printf(
+      "ping to %-15.15s is done.\n", $req_address,
+    );
   }
 
   or
 
-  use POE::Component::Client::Ping ':const';
+  use POE::Component::Client::Ping ":const";
 
-  # post an array ref as the callback to get data back to you
-  $kernel->post('pinger', 'ping', [ 'pong', @user_data ]);
+  # Post an array ref as the callback to get data back to you
+  $kernel->post("pinger", "ping", [ "pong", $user_data ]);
 
   # use the REQ_USER_ARGS constant to get to your data
   sub got_pong {
-      my ($request, $response) = @_;
-      my @req_data = @{$reqest}[REQ_USER_ARGS..$#{$request}];
+      my ($request, $response) = @_[ARG0, ARG1];
+      my $user_data = $request->[REQ_USER_ARGS];
+      ...;
   }
 
 =head1 DESCRIPTION
 
-POE::Component::Client::Ping is non-blocking ICMP ping client session.
-It lets several other sessions ping through it in parallel, and it
-lets them continue doing other things while they wait for responses.
+POE::Component::Client::Ping is non-blocking ICMP ping client.  It
+lets several other sessions ping through it in parallel, and it lets
+them continue doing other things while they wait for responses.
+
 Ping client components are not proper objects.  Instead of being
 created, as most objects are, they are "spawned" as separate sessions.
 To avoid confusion (and hopefully not cause other confusion), they
@@ -522,96 +549,111 @@ PoCo::Client::Ping's C<spawn> method takes a few named parameters:
 
 =item Alias => $session_alias
 
-C<Alias> sets the name by which the session will be known.  If no
-alias is given, the component defaults to "pinger".  The alias lets
-several sessions interact with resolver components without keeping (or
-even knowing) hard references to them.  It is possible to spawn
-several Ping components with different names, but the author can find
-no point in doing this.
+C<Alias> sets the component's alias.  It is the target of post()
+calls.  See the synopsis.  The alias defaults to "pinger".
 
 =item Socket => $raw_socket
 
-C<Socket> allows for the caller to open an existing raw socket rather
-than letting PoCo::Client::Ping try and open one itself.  This can be
-used to let startup code create the socket while running with enhanced
-privileges, which are dropped.  People who don't want to audit POE for
-security holes will find this useful since they won't need to run POE
-as root.
+C<Socket> allows developers to open an existing raw socket rather
+than letting the component attempt opening one itself.  This is useful
+for people who would rather not perform a security audit on POE, since
+it allows them to create a raw socket in their own code and then run
+POE at reduced privileges.
 
 =item Timeout => $ping_timeout
 
 C<Timeout> specifies the default amount of time a Ping component will
-wait for an ICMP echo reply.  C<$ping_timeout> contains a real number
-indicating how many seconds to wait.  It's possible and meaningful to
-set the timeout to a fractional number of seconds.
+wait for an ICMP echo reply, in seconds.  It is 1 if not specified.
+It's possible and meaningful to set the timeout to a fractional number
+of seconds.
 
-The default timeout is only used for ping requests that don't include
+This default timeout is only used for ping requests that don't include
 their own timeouts.
 
 =item OneReply => 0|1
 
-C<OneReply>, if set, tells the Ping component to clear the timeout upon
-successful ping.  The Ping component will thus only post one reply back
-to the calling module, upon either success or timeout, but not both.
-This is useful if you are checking if one host is reachable or not as
-you will only receive one reply.  By default, this setting is disabled,
-meaning that you will get the ping timeout in addition to any ping 
-replies.  This is useful if you are expecting multiple replies from one
-ping, such as when pinging a subnet.
- 
+Set C<OneReply> to prevent the Ping component from waiting the full
+timeout period for replies.  Normally the ICMP protocol allows for
+multiple replies to a single request, so it's proper to wait for late
+responses.  This option disables the wait, ending the ping transaction
+at the first response.  Any subsequent responses will be silently
+ignored.
+
+C<OneReply> is disabled by default, and a single successful request
+will generate at least two responses.  The first response is a
+successful ICMP ECHO REPLY event.  The second is an undefined response
+event, signifying that the timeout period has ended.
+
+A ping request will generate exactly one reply when C<OneReply> is
+enabled.  This reply will represent either the first ICMP ECHO REPLY
+to arrive or that the timeout period has ended.
+
 =back
 
-Sessions communicate asynchronously with PoCo::Client::Ping.  They
-post ping requests to it, and it posts responses back.
+Sessions communicate asynchronously with the Client::Ping component.
+They post ping requests to it, and they receive pong events back.
 
-Requests are posted to the component's "ping" state.  They include the
-name of a state to post responses back to, an address to ping, and an
-optional amount of time to wait for responses.  The address may be a
-numeric dotted quad, a packed inet_aton address, or a host name.  Host
-names aren't recommended: they're looked up for every ping request,
-and that's slow.  The optional timeout overrides the one set when
-C<spawn> is called.
+Requests are posted to the component's "ping" handler.  They include
+the name of an event to post back, an address to ping, and an optional
+amount of time to wait for responses.  The address may be a numeric
+dotted quad, a packed inet_aton address, or a host name.  Host names
+aren't recommended: they must be looked up for every ping request, and
+DNS lookups can be very slow.  The optional timeout overrides the one
+set when C<spawn> is called.
 
-Ping responses come with two list references:
+Ping responses come with two array references:
 
-  my ($request_packet, $response_packet) = @_[ARG0, ARG1];
+  my ($request, $response) = @_[ARG0, ARG1];
 
-C<$request_packet> contains information about the original request:
+C<$request> contains information about the original request:
 
-  my ($request_address, $request_timeout, $request_time) = @{$request_packet};
+  my (
+    $req_address, $req_timeout, $req_time, $req_user_args,
+  ) = @$request;
 
 =over 2
 
-=item C<$request_address>
+=item C<$req_address>
 
 This is the original request address.  It matches the address posted
-along with the original 'ping' request.
+along with the original "ping" request.
 
-=item C<$request_timeout>
+=item C<$req_timeout>
 
 This is the original request timeout.  It's either the one passed with
-the 'ping' request or the default timeout set with C<spawn>.
+the "ping" request or the default timeout set with C<spawn>.
 
-=item C<$request_time>
+=item C<$req_time>
 
-This is the time that the 'ping' event was received by the Ping
+This is the time that the "ping" event was received by the Ping
 component.  It is a real number based on the current system's time()
 epoch.
 
+=item C<$req_user_args>
+
+This is an arrayref of arbitrary data that can be sent along with a
+request.  It's often used to provide continuity between requests and
+their responses.
+
+To use it, replace the response event with an array reference in the
+original request.  The array reference should contain the actual
+response event and any data the program needs back.  See the SYNOPSIS
+for an example.
+
 =back
 
-C<$response_packet> contains information about the ICMP ping response.
-There may be multiple responses for a single ping.
+C<$response> contains information about the ICMP ping response.  There
+may be multiple responses for a single request.
 
-  my ($response_address, $roundtrip_time, $reply_time) = @{$response_packet};
+  my ($response_address, $roundtrip_time, $reply_time) = @$response;
 
 =over 2
 
 =item C<$response_address>
 
 This is the address that responded to the ICMP echo request.  It may
-be different than C<$request_address>, especially if the request
-address was a subnet.
+be different than C<$request_address>, especially if the request went
+to a subnet's address.
 
 C<$response_address> will be undefined if C<$request_timeout> seconds
 have elapsed.  This marks the end of responses for a given request.
@@ -632,21 +674,21 @@ real number based on the current system's time() epoch.
 
 =back
 
-If the :const tagset is imported the following constants will be exported:
+If the ":const" tagset is imported the following constants will be
+exported:
 
-REQ_ADDRESS, REQ_TIMEOUT, REQ_TIME, REQ_USER_ARGS, RES_ADDRESS, 
-RES_ROUNDTRIP, RES_TIME
+REQ_ADDRESS, REQ_TIMEOUT, REQ_TIME
+REQ_USER_ARGS, RES_ADDRESS, RES_ROUNDTRIP, RES_TIME
 
 =head1 SEE ALSO
 
 This component's ICMP ping code was lifted from Net::Ping, which is an
-excellent module times when you don't mind pinging single hosts and
-only knowing whether they're alive.
+excellent module when you only need to ping one host at a time.
 
 See POE, of course, which includes a lot of documentation about how
-POE does things.
+POE works.
 
-Also see the test program, t/01_ping.t, in the PoCo::Client::Ping
+Also see the test program, t/01_ping.t, in the component's
 distribution.
 
 =head1 BUGS
@@ -655,11 +697,13 @@ None currently known.
 
 =head1 AUTHOR & COPYRIGHTS
 
-POE::Component::Client::Ping is Copyright 1999-2002 by Rocco Caputo.
+POE::Component::Client::Ping is Copyright 1999-2004 by Rocco Caputo.
 All rights are reserved.  POE::Component::Client::Ping is free
 software; you may redistribute it and/or modify it under the same
 terms as Perl itself.
 
-Rocco may be contacted by e-mail via rcaputo@cpan.org.
+Rocco may be contacted by e-mail via <rcaputo@cpan.org>.
+
+You can learn more about POE at <http://poe.perl.org/>.
 
 =cut
