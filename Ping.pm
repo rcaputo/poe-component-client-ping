@@ -6,7 +6,7 @@ package POE::Component::Client::Ping;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = '0.92';
+$VERSION = '0.94';
 
 use Carp qw(croak);
 use Symbol qw(gensym);
