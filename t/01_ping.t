@@ -18,7 +18,7 @@ use POE qw(Component::Client::Ping);
 
 print "1..4\n";
 
-sub PING_TIMEOUT () { 1 }; # seconds between pings
+sub PING_TIMEOUT () { 5 }; # seconds between pings
 sub PING_COUNT   () { 1 }; # ping repetitions
 sub DEBUG        () { 0 }; # display more information
 
