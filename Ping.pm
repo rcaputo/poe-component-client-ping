@@ -430,7 +430,7 @@ POE::Component::Client::Ping - an ICMP ping client component
     # timeout period has ended.
     if (defined $resp_address) {
       printf( "ping to %-15.15s at %10d. pong from %-15.15s in %6.3f s\n",
-              $req_address, $request_time,
+              $req_address, $req_time,
               $resp_address, $roundtrip_time
             );
     }
