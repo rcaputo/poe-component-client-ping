@@ -24,7 +24,7 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS);
 );
 
 use vars qw($VERSION);
-$VERSION = '1.00_02';
+$VERSION = '1.01';
 
 use Carp qw(croak);
 use Symbol qw(gensym);
