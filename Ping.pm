@@ -317,6 +317,7 @@ sub poco_ping_pong {
   # Receive a message on the ICMP port.
   my $recv_message = '';
   my $from_saddr = recv($socket, $recv_message, 1500, ICMP_FLAGS);
+  return unless $from_saddr;
 
   # We haven't yet sent a message, so don't bother with whatever we've
   # received.
