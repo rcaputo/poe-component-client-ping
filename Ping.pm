@@ -24,7 +24,7 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS);
 );
 
 use vars qw($VERSION);
-$VERSION = '1.00';
+$VERSION = '1.00_02';
 
 use Carp qw(croak);
 use Symbol qw(gensym);
@@ -33,8 +33,9 @@ use Time::HiRes qw(time);
 
 use POE::Session;
 
-sub DEBUG        () { 0 }; # Enable more information.
-sub DEBUG_SOCKET () { 0 }; # Watch the socket open and close.
+sub DEBUG        () { 0 } # Enable more information.
+sub DEBUG_SOCKET () { 0 } # Watch the socket open and close.
+sub DEBUG_PBS    () { 0 } # Watch ping_by_seq management.
 
 # Spawn a new PoCo::Client::Ping session.  This basically is a
 # constructor, but it isn't named "new" because it doesn't create a
@@ -98,7 +99,7 @@ sub RES_TIME          () { 2 };
 # "Static" variables which will be shared across multiple instances.
 
 my $pid = $$ & 0xFFFF;
-my $seq = 0;
+my $master_seq = 0;
 
 # Start the pinger session.  Record running stats, and create the
 # socket which will be used to ping.
@@ -160,8 +161,8 @@ sub poco_ping_ping {
 
   # Find an unused sequence number.
   while (1) {
-    $seq = ($seq + 1) & 0xFFFF;
-    last unless exists $heap->{ping_by_seq}->{$seq};
+    $master_seq = ($master_seq + 1) & 0xFFFF;
+    last unless exists $heap->{ping_by_seq}->{$master_seq};
   }
 
   my $checksum = 0;
@@ -169,7 +170,7 @@ sub poco_ping_ping {
   # Build the message without a checksum.
   my $msg = pack( ICMP_STRUCT . $heap->{data_size},
                   ICMP_ECHO, ICMP_SUBCODE,
-                  $checksum, $pid, $seq, $heap->{data}
+                  $checksum, $pid, $master_seq, $heap->{data}
                 );
 
   ### Begin checksum calculation section.
@@ -192,7 +193,7 @@ sub poco_ping_ping {
   # Rebuild the message with the checksum this time.
   $msg = pack( ICMP_STRUCT . $heap->{data_size},
                ICMP_ECHO, ICMP_SUBCODE,
-               $checksum, $pid, $seq, $heap->{data}
+               $checksum, $pid, $master_seq, $heap->{data}
              );
 
   # Record the message's length.  This is constant, but we do it here
@@ -234,9 +235,10 @@ sub poco_ping_ping {
   }
 
   # Set a timeout based on the sequence number.
-  $kernel->delay( $seq => $timeout );
+  $kernel->delay( $master_seq => $timeout );
 
-  $heap->{ping_by_seq}->{$seq} = [
+  DEBUG_PBS and warn "recording ping_by_seq($master_seq)";
+  $heap->{ping_by_seq}->{$master_seq} = [
     # PBS_POSTBACK
     $sender->postback($event, $address, $timeout, time(), @user_args),
     "$sender",   # PBS_SESSION (stringified to weaken reference)
@@ -244,7 +246,15 @@ sub poco_ping_ping {
     time()       # PBS_REQUEST_TIME
   ];
 
-  $heap->{addr_to_seq}->{$sender}->{$address} = $seq;
+  # Duplicate pings?  Forcibly time out the previous one.
+  if (exists $heap->{addr_to_seq}->{$sender}->{$address}) {
+    my $now = time();
+    my $old_seq = delete $heap->{addr_to_seq}->{$sender}->{$address};
+    my $old_info = delete $heap->{ping_by_seq}->{$old_seq};
+    $old_info->[PBS_POSTBACK]->( undef, undef, $now );
+  }
+
+  $heap->{addr_to_seq}->{$sender}->{$address} = $master_seq;
 }
 
 # Clear a ping postback by address.  The sender+address pair are a
@@ -270,9 +280,8 @@ sub poco_ping_clear {
       unless scalar(keys %{$heap->{addr_to_seq}->{$sender}});
 
     # Discard the postback for the discarded sequence number.
+    DEBUG_PBS and warn "removing ping_by_seq($seq)";
     delete $heap->{ping_by_seq}->{$seq};
-
-    # Stop the timeout, if any, for the ping.
     $kernel->delay($seq);
   }
 
@@ -280,6 +289,7 @@ sub poco_ping_clear {
   else {
     # First discard all the ping records.
     foreach my $seq (values %{$heap->{addr_to_seq}->{$sender}}) {
+      DEBUG_PBS and warn "removing ping_by_seq($seq)";
       delete $heap->{ping_by_seq}->{$seq};
       $kernel->delay($seq);
     }
@@ -338,34 +348,34 @@ sub poco_ping_pong {
   # Not from this process.  Move along.
   return unless $from_pid == $pid;
 
-  DEBUG and warn "it's from this process";
+  DEBUG and warn "it's from this process ($pid)";
 
   # Not waiting for a response with that sequence number.  Move along.
   return unless exists $heap->{ping_by_seq}->{$from_seq};
 
-  DEBUG and warn "it's one we're waiting for";
+  DEBUG and warn "it's one we're waiting for ($from_seq)";
 
   # This is the response we're looking for.  Calculate the round trip
   # time, and map it to a postback.
   my $trip_time = $now - $heap->{ping_by_seq}->{$from_seq}->[PBS_REQUEST_TIME];
-  $heap->{ping_by_seq}->{$from_seq}->[PBS_POSTBACK]->
-    ( inet_ntoa($from_ip), $trip_time, $now
-    );
+  $heap->{ping_by_seq}->{$from_seq}->[PBS_POSTBACK]->(
+    inet_ntoa($from_ip), $trip_time, $now
+  );
 
   # It's a single-reply ping.  Clean up after it.
   # TODO - This is a lot like the cleanup in poco_ping_default().
   # Consider combining both if it makes sense.
   if ($heap->{onereply}) {
-    # Clear the timer.
-    $kernel->delay($from_seq);
-
     # Delete the ping information.  Cache a copy for other cleanup.
-    my $ping_info = delete $heap->{ping_by_seq}->{$seq};
+    DEBUG_PBS and warn "removing ping_by_seq($from_seq)";
+    my $ping_info = delete $heap->{ping_by_seq}->{$from_seq};
+    $kernel->delay($from_seq);
 
     # Stop mapping the session+address to this sequence number.
     delete(
-      $heap->{addr_to_seq}->
-      {$ping_info->[PBS_SESSION]}->{$ping_info->[PBS_ADDRESS]}
+      $heap->{addr_to_seq}->{
+        $ping_info->[PBS_SESSION]
+      }->{$ping_info->[PBS_ADDRESS]}
     );
 
     # Stop tracking the session if that was the last address.
@@ -394,6 +404,7 @@ sub poco_ping_default {
   if (exists $heap->{ping_by_seq}->{$seq}) {
 
     # Delete the ping information, but cache a copy for other work.
+    DEBUG_PBS and warn "removing ping_by_seq($seq)";
     my $ping_info = delete $heap->{ping_by_seq}->{$seq};
 
     # Post a timer tick back to the session.  This marks the end of
@@ -401,9 +412,11 @@ sub poco_ping_default {
     $ping_info->[PBS_POSTBACK]->( undef, undef, $now );
 
     # Stop mapping the session+address to this sequence number.
-    delete( $heap->{addr_to_seq}->
-            {$ping_info->[PBS_SESSION]}->{$ping_info->[PBS_ADDRESS]}
-          );
+    delete(
+      $heap->{addr_to_seq}->{
+        $ping_info->[PBS_SESSION]
+      }->{$ping_info->[PBS_ADDRESS]}
+    );
 
     # Stop tracking the session if that was the last address.
     delete $heap->{addr_to_seq}->{$ping_info->[PBS_SESSION]}
@@ -418,7 +431,8 @@ sub poco_ping_default {
     return 1;
   }
   else {
-    DEBUG and warn "this shouldn't technically be displayed";
+    warn "this shouldn't technically be displayed ($seq)"
+      if DEBUG and $seq =~ /^\d+$/;
 
     # Let unhandled signals pass through so we do not block SIGINT, etc.
     return 0;

@@ -5,3 +5,4 @@ Makefile.PL
 Ping.pm
 README
 t/01_ping.t
+META.yml                                 Module meta-data (added by MakeMaker)
