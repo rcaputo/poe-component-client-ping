@@ -17,6 +17,19 @@ Note to self: Don't forget to tag the version after a new distribution
 is released.  For example: `cvs tag -Rc v1_00 .'
 
 ---------------
+0.95 ????.??.??
+---------------
+
+Add the changes for 0.94, which were forgotten in 0.94.  Whoops!
+
+---------------
+0.94 2001.10.15
+---------------
+
+Fix an off-by-one error in t/01_ping.t that was causing false
+failures.
+
+---------------
 0.93 2001.10.13
 ---------------
 
