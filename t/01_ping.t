@@ -101,7 +101,7 @@ sub client_stop {
   print 'not ' unless ( $heap->{requests} == $heap->{dones} and
                         $heap->{answers}
                       );
-  print 'ok ', $session->ID, "\n";
+  print 'ok ', ($session->ID() - 1), "\n";
 }
 
 #------------------------------------------------------------------------------
