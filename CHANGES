@@ -17,10 +17,54 @@ Note to self: Don't forget to tag the version after a new distribution
 is released.  For example: `cvs tag -Rc v1_00 .'
 
 ---------------
-0.95 ????.??.??
+0.97 2002.08.27
+---------------
+
+Michael Ching discovered that the component would ping 127.0.0.1 if
+given an invalid address.  Rocco applied his patch to fail outright in
+this case.  Also his patch to make the SYNOPSIS work.
+
+Michael Ching also pointed out that send() failing should count for
+something other than a harsh, unexplained die().  I adapted his code
+from the previous patch to gracefully indicate ping failure when
+send() fails.
+
+---------------
+0.96 2002.08.18
+---------------
+
+L. Leo found a typo in poco_ping_ping().  I'm surprised it wasn't
+causing noticeable problems.
+
+Michael Ching added constants for the fields in Client::Ping's
+responses.  This is nicer than relying on their order.
+
+Michael Ching also added a OneReply parameter, which should speed up
+Client::Ping when you know you're pinging individual hosts.  OneReply
+short-circuits the timeout wait, returning at most one reply from any
+request.
+
+Michael Ching added a feature where, if the response event is an ARRAY
+reference, the first element is the event and the remainder are user
+arguments.  These user arguments are passed back in the component's
+response.
+
+Michael Ching noticed that this component traps all signals.  Now that
+POE's signal handling semantics are being fixed, this type of trapping
+causes programs to never exit.  Michael updated the signal handler to
+work correctly now.
+
+Michael Ching also documented his patches.  Excellent!
+
+---------------
+0.95 2001.11.18
 ---------------
 
 Add the changes for 0.94, which were forgotten in 0.94.  Whoops!
+
+Add Fletch's patch to accept a pre-built raw socket.  It's possible to
+create a raw socket, drop down to regular user privileges, and *then*
+start pinging.
 
 ---------------
 0.94 2001.10.15
