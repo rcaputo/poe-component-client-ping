@@ -24,7 +24,7 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS);
 );
 
 use vars qw($VERSION);
-$VERSION = '1.01';
+$VERSION = '1.02';
 
 use Carp qw(croak);
 use Symbol qw(gensym);
@@ -168,10 +168,10 @@ sub poco_ping_ping {
   my $checksum = 0;
 
   # Build the message without a checksum.
-  my $msg = pack( ICMP_STRUCT . $heap->{data_size},
-                  ICMP_ECHO, ICMP_SUBCODE,
-                  $checksum, $pid, $master_seq, $heap->{data}
-                );
+  my $msg = pack(
+    ICMP_STRUCT . $heap->{data_size},
+    ICMP_ECHO, ICMP_SUBCODE, $checksum, $pid, $master_seq, $heap->{data}
+  );
 
   ### Begin checksum calculation section.
 
@@ -191,10 +191,10 @@ sub poco_ping_ping {
   ### Cease checksum calculation section.
 
   # Rebuild the message with the checksum this time.
-  $msg = pack( ICMP_STRUCT . $heap->{data_size},
-               ICMP_ECHO, ICMP_SUBCODE,
-               $checksum, $pid, $master_seq, $heap->{data}
-             );
+  $msg = pack(
+    ICMP_STRUCT . $heap->{data_size},
+    ICMP_ECHO, ICMP_SUBCODE, $checksum, $pid, $master_seq, $heap->{data}
+  );
 
   # Record the message's length.  This is constant, but we do it here
   # anyway.  It's also used to flag when we start requesting replies.
@@ -208,10 +208,11 @@ sub poco_ping_ping {
   }
 
   # Build an address to send the ping at.
-  my $usable_address = ( (length($address) == 4)
-                         ? $address
-                         : inet_aton($address)
-                       );
+  my $usable_address = (
+    (length($address) == 4)
+    ? $address
+    : inet_aton($address)
+  );
 
   # Return failure if an address was not resolvable.  This simulates
   # the postback behavior.
@@ -220,6 +221,7 @@ sub poco_ping_ping {
                    [ $address, $timeout, time() ],
                    [ undef, undef, time() ],
                  );
+    _check_for_close($kernel, $heap);
     return;
   }
 
@@ -231,6 +233,7 @@ sub poco_ping_ping {
                    [ $address, $timeout, time() ],
                    [ undef, undef, time() ],
                  );
+    _check_for_close($kernel, $heap);
     return;
   }
 
@@ -298,7 +301,13 @@ sub poco_ping_clear {
     delete $heap->{addr_to_seq}->{$sender};
   }
 
-  # No more pings waiting.  Close the socket.
+  _check_for_close($kernel, $heap);
+}
+
+# XXX - NOT A POE EVENT HANDLER
+# Check to see if no more pings are waiting.  Close the socket if so.
+sub _check_for_close {
+  my ($kernel, $heap) = @_;
   unless (scalar(keys %{$heap->{ping_by_seq}}) || $heap->{keep_socket}) {
     DEBUG_SOCKET and warn "closing the raw icmp socket";
     $kernel->select_read( delete $heap->{socket_handle} );
@@ -383,11 +392,7 @@ sub poco_ping_pong {
     delete $heap->{addr_to_seq}->{$ping_info->[PBS_SESSION]}
       unless scalar(keys %{$heap->{addr_to_seq}->{$ping_info->[PBS_SESSION]}});
 
-    # Close the socket if there are no sessions waiting for responses.
-    unless (scalar(keys %{$heap->{ping_by_seq}}) || $heap->{keep_socket}) {
-      DEBUG_SOCKET and warn "closing the raw icmp socket";
-      $kernel->select_read( delete $heap->{socket_handle} );
-    }
+    _check_for_close($kernel, $heap);
   }
 }
 
@@ -423,11 +428,7 @@ sub poco_ping_default {
     delete $heap->{addr_to_seq}->{$ping_info->[PBS_SESSION]}
       unless scalar(keys %{$heap->{addr_to_seq}->{$ping_info->[PBS_SESSION]}});
 
-    # Close the socket if there are no sessions waiting for responses.
-    unless (scalar(keys %{$heap->{ping_by_seq}}) || $heap->{keep_socket}) {
-      DEBUG_SOCKET and warn "closing the raw icmp socket";
-      $kernel->select_read( delete $heap->{socket_handle} );
-    }
+    _check_for_close($kernel, $heap);
 
     return 1;
   }
