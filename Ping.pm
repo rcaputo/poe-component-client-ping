@@ -408,12 +408,14 @@ POE::Component::Client::Ping - an ICMP ping client component
     OneReply  => 1             # defaults to disabled
   );
 
-  $kernel->post( 'pingthing', # Post the request to the 'pingthing'.
-                 'ping',      # Ask it to 'ping' an address.
-                 'pong',      # Have it post an answer to my 'pong' state.
-                 $address,    # This is the address we want to ping.
-                 $timeout,    # An optional timeout.  It overrides the default.
-               );
+  sub some_event_handler {
+    $kernel->post( 'pingthing', # Post the request to the 'pingthing'.
+                   'ping',      # Ask it to 'ping' an address.
+                   'pong',      # Have it post an answer to my 'pong' state.
+                   $address,    # This is the address we want to ping.
+                   $timeout,    # Optional timeout.  It overrides the default.
+                 );
+  }
 
   # This is the sub which is called when the session receives a 'pong'
   # event.  It handles responses from the Ping component.
