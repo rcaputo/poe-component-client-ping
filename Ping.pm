@@ -24,7 +24,7 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS);
 );
 
 use vars qw($VERSION);
-$VERSION = '1.03';
+$VERSION = '1.04';
 
 use Carp qw(croak);
 use Symbol qw(gensym);
@@ -555,17 +555,19 @@ calls.  See the synopsis.  The alias defaults to "pinger".
 =item Socket => $raw_socket
 
 C<Socket> allows developers to open an existing raw socket rather
-than letting the component attempt opening one itself.  This is useful
-for people who would rather not perform a security audit on POE, since
-it allows them to create a raw socket in their own code and then run
-POE at reduced privileges.
+than letting the component attempt opening one itself.  If omitted,
+the component will create its own raw socket.
+
+This is useful for people who would rather not perform a security
+audit on POE, since it allows them to create a raw socket in their own
+code and then run POE at reduced privileges.
 
 =item Timeout => $ping_timeout
 
-C<Timeout> specifies the default amount of time a Ping component will
-wait for an ICMP echo reply, in seconds.  It is 1 if not specified.
-It's possible and meaningful to set the timeout to a fractional number
-of seconds.
+C<Timeout> sets the default amount of time a Ping component will wait
+for an ICMP echo reply, in seconds.  It is 1 by default.  It's
+possible and meaningful to set the timeout to a fractional number of
+seconds.
 
 This default timeout is only used for ping requests that don't include
 their own timeouts.
@@ -597,9 +599,9 @@ Requests are posted to the component's "ping" handler.  They include
 the name of an event to post back, an address to ping, and an optional
 amount of time to wait for responses.  The address may be a numeric
 dotted quad, a packed inet_aton address, or a host name.  Host names
-aren't recommended: they must be looked up for every ping request, and
-DNS lookups can be very slow.  The optional timeout overrides the one
-set when C<spawn> is called.
+are not recommended: they must be looked up for every ping request,
+and DNS lookups can be very slow.  The optional timeout overrides the
+one set when C<spawn> is called.
 
 Ping responses come with two array references:
 
@@ -618,6 +620,9 @@ C<$request> contains information about the original request:
 This is the original request address.  It matches the address posted
 along with the original "ping" request.
 
+It is useful along with C<$req_user_args> for pairing requests with
+their corresponding responses.
+
 =item C<$req_timeout>
 
 This is the original request timeout.  It's either the one passed with
@@ -631,14 +636,15 @@ epoch.
 
 =item C<$req_user_args>
 
-This is an arrayref of arbitrary data that can be sent along with a
-request.  It's often used to provide continuity between requests and
-their responses.
+This is a scalar containing arbitrary data that can be sent along with
+a request.  It's often used to provide continuity between requests and
+their responses.  C<$req_user_args> may contain a reference to some
+larger data structure.
 
 To use it, replace the response event with an array reference in the
-original request.  The array reference should contain the actual
-response event and any data the program needs back.  See the SYNOPSIS
-for an example.
+original request.  The array reference should contain two items: the
+actual response event and a scalar with the context data the program
+needs back.  See the SYNOPSIS for an example.
 
 =back
 
@@ -652,14 +658,14 @@ may be multiple responses for a single request.
 =item C<$response_address>
 
 This is the address that responded to the ICMP echo request.  It may
-be different than C<$request_address>, especially if the request went
-to a subnet's address.
+be different than C<$request_address>, especially if the request was
+sent to a broadcast address.
 
 C<$response_address> will be undefined if C<$request_timeout> seconds
 have elapsed.  This marks the end of responses for a given request.
-Programs can assume that a request address will not send more
-responses after this, and they may use the end-of-responses marker to
-initiate another ping request.
+Programs can assume that no more responses will be sent for the
+request address.  They may use this marker to initiate another ping
+request.
 
 =item C<$roundtrip_time>
 
