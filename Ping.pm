@@ -594,9 +594,11 @@ None currently known.
 
 =head1 AUTHOR & COPYRIGHTS
 
-POE::Component::Client::Ping is Copyright 1999-2000 by Rocco Caputo.
+POE::Component::Client::Ping is Copyright 1999-2002 by Rocco Caputo.
 All rights are reserved.  POE::Component::Client::Ping is free
 software; you may redistribute it and/or modify it under the same
 terms as Perl itself.
+
+Rocco may be contacted by e-mail via rcaputo@cpan.org.
 
 =cut
