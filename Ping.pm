@@ -102,7 +102,15 @@ sub poco_ping_start {
   $heap->{onereply}      = $onereply;
   $heap->{ping_by_seq}   = { };  # keyed on sequence number
   $heap->{addr_to_seq}   = { };  # keyed on request address, then sender
-  $heap->{socket_handle} = $socket if defined $socket;
+
+  if (defined $socket) {
+    # root is needed for this step too
+    $kernel->select_read($heap->{socket_handle} = $socket, 'got_pong');
+    $heap->{keep_socket}   = 1;
+  } else {
+    $heap->{keep_socket}   = 0;
+  }
+
   $kernel->alias_set($alias);
 }
 
@@ -270,7 +278,7 @@ sub poco_ping_clear {
   }
 
   # No more pings waiting.  Close the socket.
-  unless (scalar keys %{$heap->{ping_by_seq}}) {
+  unless (scalar(keys %{$heap->{ping_by_seq}}) || $heap->{keep_socket}) {
     DEBUG_SOCKET and warn "closing the raw icmp socket";
     $kernel->select_read( delete $heap->{socket_handle} );
   }
@@ -367,7 +375,7 @@ sub poco_ping_default {
       unless scalar(keys %{$heap->{addr_to_seq}->{$ping_info->[PBS_SESSION]}});
 
     # Close the socket if there are no sessions waiting for responses.
-    unless (scalar keys %{$heap->{ping_by_seq}}) {
+    unless (scalar(keys %{$heap->{ping_by_seq}}) || $heap->{keep_socket}) {
       DEBUG_SOCKET and warn "closing the raw icmp socket";
       $kernel->select_read( delete $heap->{socket_handle} );
     }
@@ -395,9 +403,9 @@ POE::Component::Client::Ping - an ICMP ping client component
   use POE qw(Component::Client::Ping);
 
   POE::Component::Client::Ping->spawn(
-    Alias       => 'pingthing',   # defaults to 'pinger'
-    Timeout     => 10,            # defaults to 1 second
-    OneReply    => 1             # defaults to disabled
+    Alias     => 'pingthing',  # defaults to 'pinger'
+    Timeout   => 10,           # defaults to 1 second
+    OneReply  => 1             # defaults to disabled
   );
 
   $kernel->post( 'pingthing', # Post the request to the 'pingthing'.
