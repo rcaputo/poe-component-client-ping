@@ -20,7 +20,9 @@ is released.  For example: `cvs tag -Rc v1_00 .'
 0.92 2001.05.29
 ---------------
 
-No changes.  The version number changed to reflect a CPAN release.
+Removed private subnet addresses from t/01_ping.t.  My FreeBSD 4.3
+system is set up to deny ICMP pings to subnets, and I imagine others
+also are.
 
 ---------------
 0.91 2000.09.02
