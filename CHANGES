@@ -17,6 +17,17 @@ Note to self: Don't forget to tag the version after a new distribution
 is released.  For example: `cvs tag -Rc v1_00 .'
 
 ---------------
+0.93 2001.10.13
+---------------
+
+Fix a copy-and-paste-o in the documentation.  I had copied it from
+POE::Component::Client::DNS, and the docs had a lingering instance of
+that module name.  Thanks for spotting this, Fletch.
+
+Documented undefined response addresses.  They're markers that a ping
+request has timed out and won't be generating more responses.
+
+---------------
 0.92 2001.05.29
 ---------------
 
