@@ -14,18 +14,13 @@ Requirements
 ------------
 
 This module requires POE.  It also requires root privilege, or your
-operating system's equivalent, so that it can open a raw socket on
-port 0.  Knowing what this means is left as an exercise for the
-reader.
+operating system's equivalent, so that it can open a socket for ICMP
+ping.  Knowing what this means, how to achieve it, and the potential
+hazards of doing so are left as exercises for the reader.
 
 ------------------
 Basic Installation
 ------------------
-
-[Note: This section is written in advance of PoCo::Client::Ping's
-placement on the CPAN.  These steps are wrong, and you will find no
-joy following them.  Please read the Manual Installation section
-instead.]
 
 POE::Component::Client::Ping may be installed through the CPAN shell
 in the usual CPAN shell manner.  This typically is:
@@ -45,13 +40,10 @@ And you can install the component from the CPAN prompt as well:
 Manual Installation
 -------------------
 
-POE::Component::Client::Ping can also be installed manually.  The
-latest CPAN version can be found at
-<ftp://ftp.cpan.org/pub/CPAN/authors/id/R/RC/RCAPUTO/> or in a
-similarly named directory at your favorite CPAN mirror.  The most
-recent development snapshot, which only rarely contains hideous
-show-stopping bugs, is available from POE's web site at
-<http://poe.perl.org/>.
+POE::Component::Client::Ping can also be installed manually.
+<ftp://ftp.cpan.org/pub/CPAN/authors/id/R/RC/RCAPUTO/> or a similarly
+named directory at your favorite CPAN mirror should hold the latest
+version.
 
 Downloading and unpacking the distribution are left as exercises for
 the reader.  To build and test it:
@@ -71,6 +63,6 @@ When you're ready to install the component:
 
 It should now be ready to use.
 
----------------------------
-EOF: Thank you for reading.
----------------------------
+Thanks for reading!
+
+-- Rocco Caputo / troc@netrus.net / poe.perl.org / poe.sourceforge.net

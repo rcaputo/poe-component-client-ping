@@ -6,7 +6,7 @@ package POE::Component::Client::Ping;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = '0.91';
+$VERSION = '0.92';
 
 use Carp qw(croak);
 use Symbol qw(gensym);
@@ -36,7 +36,7 @@ sub spawn {
   my $timeout = delete $params{Timeout};
   $timeout = 1 unless defined $timeout and $timeout >= 0;
 
-  croak( "$type doesn't know these parameters: ", 
+  croak( "$type doesn't know these parameters: ",
          join(', ', sort keys %params)
        ) if scalar keys %params;
 
@@ -171,7 +171,7 @@ sub poco_ping_ping {
   # Record information about the ping request.
   $heap->{ping_by_seq}->{$seq} =
     [ # PBS_POSTBACK
-      $sender->postback($event, $address, $timeout, time()), 
+      $sender->postback($event, $address, $timeout, time()),
       "$sender",   # PBS_SESSION (stringified to weaken reference)
       $address,    # PBS_ADDRESS
       time()       # PBS_REQUEST_TIME
