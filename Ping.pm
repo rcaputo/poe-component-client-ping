@@ -13,7 +13,7 @@ use Exporter;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = '0.97';
+$VERSION = '0.98';
 
 use Carp qw(croak);
 use Symbol qw(gensym);
