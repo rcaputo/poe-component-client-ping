@@ -1,0 +1,7 @@
+# $Id$
+CHANGES
+MANIFEST
+Makefile.PL
+POE/Component/Client/Ping.pm
+README
+t/01_ping.t
