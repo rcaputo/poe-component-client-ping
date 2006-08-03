@@ -12,19 +12,19 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS);
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(
   REQ_ADDRESS REQ_TIMEOUT REQ_TIME REQ_USER_ARGS RES_ADDRESS
-  RES_ROUNDTRIP RES_TIME
+  RES_ROUNDTRIP RES_TIME RES_TTL
 );
 %EXPORT_TAGS = (
   const => [
     qw(
       REQ_ADDRESS REQ_TIMEOUT REQ_TIME REQ_USER_ARGS RES_ADDRESS
-      RES_ROUNDTRIP RES_TIME
+      RES_ROUNDTRIP RES_TIME RES_TTL
     )
   ]
 );
 
 use vars qw($VERSION $PKTSIZE);
-$VERSION = '1.12';
+$VERSION = '1.13';
 $PKTSIZE = $^O eq 'linux' ? 3_000 : 100;
 
 use Carp qw(croak);
@@ -105,6 +105,7 @@ sub REQ_USER_ARGS     () { 3 };
 sub RES_ADDRESS       () { 0 };
 sub RES_ROUNDTRIP     () { 1 };
 sub RES_TIME          () { 2 };
+sub RES_TTL           () { 3 };
 
 # "Static" variables which will be shared across multiple instances.
 
@@ -286,6 +287,7 @@ sub poco_ping_ping {
       [ undef,   # RES_ADDRESS
         undef,   # RES_ROUNDTRIP
         time(),  # RES_TIME
+        undef,   # RES_TTL
       ],
     );
     _check_for_close($kernel, $heap);
@@ -364,6 +366,7 @@ sub _send_packet {
       [ undef,   # RES_ADDRESS
         undef,   # RES_ROUNDTRIP
         time(),  # RES_TIME
+        undef,   # RES_TTL
       ],
     );
     _check_for_close($kernel, $heap);
@@ -403,7 +406,7 @@ sub _send_packet {
     my $now = time();
     my $old_seq = delete $heap->{addr_to_seq}->{$sender}->{$address};
     my $old_info = delete $heap->{ping_by_seq}->{$old_seq};
-    $old_info->[PBS_POSTBACK]->( undef, undef, $now );
+    $old_info->[PBS_POSTBACK]->( undef, undef, $now, undef );
   }
 
   $heap->{addr_to_seq}->{$sender}->{$address} = $seq;
@@ -519,6 +522,9 @@ sub poco_ping_pong {
   # Unpack the packet's sender address.
   my ($from_port, $from_ip) = unpack_sockaddr_in($from_saddr);
 
+  # Get the response packet's time to live.
+  my ($from_ttl) = unpack('C', substr($recv_message, 8, 1));
+
   # Unpack the packet itself.
   my (
     $from_type, $from_subcode,
@@ -555,7 +561,7 @@ sub poco_ping_pong {
   # time, and map it to a postback.
   my $trip_time = $now - $heap->{ping_by_seq}->{$from_seq}->[PBS_REQUEST_TIME];
   $heap->{ping_by_seq}->{$from_seq}->[PBS_POSTBACK]->(
-    inet_ntoa($from_ip), $trip_time, $now
+    inet_ntoa($from_ip), $trip_time, $now, $from_ttl
   );
 
   # It's a single-reply ping.  Clean up after it.
@@ -592,7 +598,7 @@ sub poco_ping_default {
     # Post a timer tick back to the session.  This marks the end of
     # the request/response transaction.
     my $ping_info = _end_ping($kernel, $heap, $seq);
-    $ping_info->[PBS_POSTBACK]->( undef, undef, $now );
+    $ping_info->[PBS_POSTBACK]->( undef, undef, $now, undef );
     _send_packet($kernel, $heap);
     _check_for_close($kernel, $heap);
 
@@ -646,7 +652,7 @@ POE::Component::Client::Ping - a non-blocking ICMP ping client
     my ($request, $response) = @_[ARG0, ARG1];
 
     my ($req_address, $req_timeout, $req_time)      = @$request;
-    my ($resp_address, $roundtrip_time, $resp_time) = @$response;
+    my ($resp_address, $roundtrip_time, $resp_time, $resp_ttl) = @$response;
 
     # The response address is defined if this is a response.
     if (defined $resp_address) {
@@ -842,7 +848,8 @@ needs back.  See the SYNOPSIS for an example.
 C<$response> contains information about the ICMP ping response.  There
 may be multiple responses for a single request.
 
-  my ($response_address, $roundtrip_time, $reply_time) = @$response;
+  my ($response_address, $roundtrip_time, $reply_time, $reply_ttl) =
+  @$response;
 
 =over 2
 
@@ -871,13 +878,17 @@ transmission to be delayed.
 This is the time when the ICMP echo response was received.  It is a
 real number based on the current system's time() epoch.
 
+=item C<$reply_ttl>
+
+This is the ttl for the echo response packet we received.
+
 =back
 
 If the ":const" tagset is imported the following constants will be
 exported:
 
 REQ_ADDRESS, REQ_TIMEOUT, REQ_TIME
-REQ_USER_ARGS, RES_ADDRESS, RES_ROUNDTRIP, RES_TIME
+REQ_USER_ARGS, RES_ADDRESS, RES_ROUNDTRIP, RES_TIME, RES_TTL
 
 =head1 SEE ALSO
 

@@ -1,9 +1,8 @@
 #!/usr/bin/perl -w
 # $Id$
+# vim: filetype=perl
 
 use strict;
-
-use lib '/home/troc/perl/poe';
 
 BEGIN {
   $| = 1;
@@ -15,8 +14,7 @@ BEGIN {
 
 sub POE::Kernel::ASSERT_DEFAULT () { 1 }
 use POE qw(Component::Client::Ping);
-
-print "1..4\n";
+use Test::More tests => 2;
 
 sub PING_TIMEOUT () { 5 }; # seconds between pings
 sub PING_COUNT   () { 1 }; # ping repetitions
@@ -59,12 +57,13 @@ sub client_send_ping {
 
   $heap->{requests}++;
   $heap->{ping_counts}->{$address}++;
-  $kernel->post( 'pinger',     # Post the request to the 'pinger'.
-                 'ping',       # Ask it to 'ping' an address.
-                 'pong',       # Have it post an answer to my 'pong' state.
-                 $address,     # This is the address we want it to ping.
-                 PING_TIMEOUT  # This is the optional time to wait.
-               );
+  $kernel->post(
+    'pinger',     # Post the request to the 'pinger'.
+    'ping',       # Ask it to 'ping' an address.
+    'pong',       # Have it post an answer to my 'pong' state.
+    $address,     # This is the address we want it to ping.
+    PING_TIMEOUT  # This is the optional time to wait.
+  );
 }
 
 sub client_got_pong {
@@ -72,23 +71,34 @@ sub client_got_pong {
     @_[KERNEL, SESSION, HEAP, ARG0, ARG1];
 
   my ($request_address, $request_timeout, $request_time) = @{$request_packet};
-  my ($response_address, $roundtrip_time, $reply_time)   = @{$response_packet};
+  my (
+    $response_address, $roundtrip_time, $reply_time, $reply_ttl
+  ) = @{$response_packet};
 
   if (defined $response_address) {
-    DEBUG and warn
-      sprintf( "%d: ping to %-15.15s at %10d. pong from %-15.15s in %6.3f s\n",
-               $session->ID,
-               $request_address, $request_time,
-               $response_address, $roundtrip_time
-             );
+    DEBUG and warn(
+      sprintf(
+        "%d: ping to %-15.15s at %10d. " .
+        "pong from %-15.15s in %6.3f s (ttl %3d)\n",
+        $session->ID,
+        $request_address, $request_time,
+        $response_address, $roundtrip_time, $reply_ttl,
+      )
+    );
 
     $heap->{answers}++ if $roundtrip_time <= $request_timeout;
+    $heap->{bad_ttl}++ if (
+      $reply_ttl !~ /^\d+$/ or
+      $reply_ttl < 0 or
+      $reply_ttl > 255
+    );
   }
   else {
     DEBUG and warn( $session->ID, ": time's up for $request_address...\n" );
 
-    $kernel->yield(ping => $request_address)
-      if $heap->{ping_counts}->{$request_address} < PING_COUNT;
+    $kernel->yield(ping => $request_address) if (
+      $heap->{ping_counts}->{$request_address} < PING_COUNT
+    );
 
     $heap->{dones}++;
   }
@@ -98,38 +108,38 @@ sub client_stop {
   my ($session, $heap) = @_[SESSION, HEAP];
   DEBUG and warn( $session->ID, ": pinger client session stopped...\n" );
 
-  print 'not ' unless ( $heap->{requests} == $heap->{dones} and
-                        $heap->{answers}
-                      );
-  print 'ok ', ($session->ID() - 1), "\n";
+  ok(
+    (
+      $heap->{requests} == $heap->{dones}
+      && $heap->{answers}
+      && !$heap->{bad_ttl}
+    ),
+    "pinger client session got responses"
+  );
 }
 
 #------------------------------------------------------------------------------
 
 # Create a pinger component.
-POE::Component::Client::Ping->spawn
-  ( Alias   => 'pinger',     # This is the name it'll be known by.
-    Timeout => PING_TIMEOUT, # This is how long it waits for echo replies.
-  );
+POE::Component::Client::Ping->spawn(
+  Alias   => 'pinger',     # This is the name it'll be known by.
+  Timeout => PING_TIMEOUT, # This is how long it waits for echo replies.
+);
 
 # Create two sessions that will use the pinger.  This tests
 # concurrency against the same addresses.
 for (my $session_index = 0; $session_index < 2; $session_index++) {
-  POE::Session->create
-    ( inline_states =>
-      { _start => \&client_start,
-        _stop  => \&client_stop,
-        pong   => \&client_got_pong,
-        ping   => \&client_send_ping,
-      }
-    );
+  POE::Session->create(
+    inline_states => {
+      _start => \&client_start,
+      _stop  => \&client_stop,
+      pong   => \&client_got_pong,
+      ping   => \&client_send_ping,
+    }
+  );
 }
 
-print "ok 1\n";
-
 # Run it all until done.
-$poe_kernel->run();
-
-print "ok 4\n";
+POE::Kernel->run();
 
 exit;
