@@ -10,6 +10,7 @@ WriteMakefile(
   NAME         => 'POE::Component::Client::Ping',
   AUTHOR       => 'Rocco Caputo <rcaputo@cpan.org>',
   ABSTRACT     => 'POE component for non-blocking/concurrent ICMP ping.',
+  LICENSE      => 'perl',
   VERSION_FROM => 'Ping.pm',
 
   PM           => { 'Ping.pm'   => '$(INST_LIBDIR)/Ping.pm' },
