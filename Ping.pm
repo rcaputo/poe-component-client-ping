@@ -66,6 +66,10 @@ sub spawn {
   my $rcvbuf = delete $params{BufferSize};
   my $always_decode = delete $params{AlwaysDecodeAddress};
   my $retry = delete $params{Retry};
+  my $payload = delete $params{Payload};
+
+  # 56 data bytes :)
+  $payload = 'Use POE!' x 7 unless defined $payload;
 
   croak(
     "$type doesn't know these parameters: ", join(', ', sort keys %params)
@@ -81,7 +85,7 @@ sub spawn {
     },
     args => [
       $alias, $timeout, $retry, $socket, $onereply, $parallelism,
-      $rcvbuf, $always_decode
+      $rcvbuf, $always_decode, $payload
     ],
   );
 
@@ -119,10 +123,10 @@ sub poco_ping_start {
   my (
     $kernel, $heap,
     $alias, $timeout, $retry, $socket, $onereply, $parallelism,
-    $rcvbuf, $always_decode
-  ) = @_[KERNEL, HEAP, ARG0..ARG7];
+    $rcvbuf, $always_decode, $payload
+  ) = @_[KERNEL, HEAP, ARG0..ARG8];
 
-  $heap->{data}          = 'Use POE!' x 7;        # 56 data bytes :)
+  $heap->{data}          = $payload;
   $heap->{data_size}     = length($heap->{data});
   $heap->{timeout}       = $timeout;
   $heap->{onereply}      = $onereply;
@@ -786,6 +790,12 @@ Ideally, you should be passing addresses in to the system to
 avoid slow hostname lookups, but if you must use hostnames
 and there is a possibility that you might have short
 hostnames, then you should set this.
+
+=item Payload => $bytes
+
+Sets the ICMP payload (data bytes).  Otherwise the component generates
+56 data bytes internally.  Note that some firewalls will discard ICMP
+packets with nonstandard payload sizes.
 
 =back
 
