@@ -24,7 +24,7 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS);
 );
 
 use vars qw($VERSION $PKTSIZE);
-$VERSION = '1.13';
+$VERSION = '1.14';
 $PKTSIZE = $^O eq 'linux' ? 3_000 : 100;
 
 use Carp qw(croak);
@@ -527,16 +527,15 @@ sub poco_ping_pong {
   my ($from_port, $from_ip) = unpack_sockaddr_in($from_saddr);
 
   # Get the response packet's time to live.
-  my ($from_ttl) = unpack('C', substr($recv_message, 8, 1));
+  my ($ihl, $from_ttl) = unpack('C1@7C1', $recv_message);
+  $ihl &= 0x0F;
 
   # Unpack the packet itself.
   my (
     $from_type, $from_subcode,
     $from_checksum, $from_pid, $from_seq, $from_message
-  )  = unpack(
-    ICMP_STRUCT . $heap->{data_size},
-    substr($recv_message, -$heap->{message_length})
-  );
+  )  = unpack( '@'.$ihl*4 . ICMP_STRUCT.$heap->{data_size},
+               $recv_message );
 
   DEBUG and do {
     warn ",----- packet from ", inet_ntoa($from_ip), ", port $from_port\n";
