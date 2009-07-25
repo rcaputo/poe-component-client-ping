@@ -24,7 +24,7 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS);
 );
 
 use vars qw($VERSION $PKTSIZE);
-$VERSION = '1.14';
+$VERSION = '1.15';
 $PKTSIZE = $^O eq 'linux' ? 3_000 : 100;
 
 use Carp qw(croak);
@@ -62,7 +62,7 @@ sub spawn {
 
   my $onereply = delete $params{OneReply};
   my $socket = delete $params{Socket};
-  my $parallelism = delete $params{Parallelism};
+  my $parallelism = delete $params{Parallelism} || -1;
   my $rcvbuf = delete $params{BufferSize};
   my $always_decode = delete $params{AlwaysDecodeAddress};
   my $retry = delete $params{Retry};
@@ -191,7 +191,14 @@ sub create_handle {
     my $rcvbuf = getsockopt($socket, SOL_SOCKET, SO_RCVBUF);
     if ($rcvbuf) {
       my $size = unpack("I", $rcvbuf);
-      $heap->{parallelism} = int($size / $PKTSIZE);
+      my $max_parallel = int($size / $PKTSIZE);
+      if ($max_parallel > 8) {
+        $max_parallel -= 8;
+      }
+      elsif ($max_parallel < 1) {
+        $max_parallel = 1;
+      }
+      $heap->{parallelism} = $max_parallel;
     }
   }
 
@@ -633,7 +640,7 @@ POE::Component::Client::Ping - a non-blocking ICMP ping client
     Timeout             => 10,           # defaults to 1 second
     Retry               => 3,            # defaults to 1 attempt
     OneReply            => 1,            # defaults to disabled
-    Parallelism         => 20,           # defaults to undef
+    Parallelism         => 64,           # defaults to autodetect
     BufferSize          => 65536,        # defaults to undef
     AlwaysDecodeAddress => 1,            # defaults to 0
   );
@@ -753,21 +760,58 @@ to arrive or that the timeout period has ended.
 
 =item Parallelism => $limit
 
-If unset, then the session will send an unlimited number of pings
-simultaneously. However, the system may not cope with the number of
-incoming replies (e.g. if the receive buffer of the socket is not
-large enough to cope with all the simultaneous replies) and by using
-this parameter you can limit how many pings will be outstanding at one
-time. If this parameter is set to -1, then the parallelism limit will
-be calculated (guessed) based on the size of the receive buffer of the
-raw socket. For guessing the parallelism limit based upon the buffer
-size, this component assumes the size of a packet is set to 3k on
-linux and 100b on other operating systems. The true size of an ICMP
-ping reply is around 88 bytes, but that's not what is used by the
-operating system to determine if there's space in the buffer. This
-value can be modified by setting
-$POE::Component::Client::Ping::PKTSIZE to the appropriate number of
-bytes.
+Parallelism sets POE::Component::Client::Ping's maximum number of
+simultaneous ICMP requests.  Higher numbers speed up the processing of
+large host lists, up to the point where the operating system or
+network becomes oversaturated and begin to drop packets.
+
+The difference can be dramatic.  A tuned Parallelism can enable
+responses down to 1ms, depending on the network, although it will take
+longer to get through the hosts list.
+
+  Pinging 762 hosts at Parallelism=64
+  Starting to ping hosts.
+  Pinged 10.0.0.25       - Response from 10.0.0.25       in  0.002s
+  Pinged 10.0.0.200      - Response from 10.0.0.200      in  0.003s
+  Pinged 10.0.0.201      - Response from 10.0.0.201      in  0.001s
+
+  real  1m1.923s
+  user  0m2.584s
+  sys   0m0.207s
+
+Responses will take significantly longer with an untuned Parallelism,
+but the total run time will be quicker.
+
+  Pinging 762 hosts at Parallelism=500
+  Starting to ping hosts.
+  Pinged 10.0.0.25       - Response from 10.0.0.25       in  3.375s
+  Pinged 10.0.0.200      - Response from 10.0.0.200      in  1.258s
+  Pinged 10.0.0.201      - Response from 10.0.0.201      in  2.040s
+
+  real  0m13.410s
+  user  0m6.390s
+  sys   0m0.290s
+
+Excessively high parallelism values may saturate the OS or network,
+resulting in few or no responses.
+
+  Pinging 762 hosts at Parallelism=1000
+  Starting to ping hosts.
+
+  real  0m20.520s
+  user  0m7.896s
+  sys   0m0.297s
+
+By default, POE::Component::Client::Ping will guess at an optimal
+Parallelism value based on the raw socket receive buffer size and the
+operating system's nominal ICMP packet size.  The latter figure is
+3000 octets for Linux and 100 octets for other systems.  ICMP packets
+are generally under 90 bytes, but operating systems may use
+alternative numbers when calculating buffer capacities.  The component
+tries to mimic calculations observed in the wild.
+
+When in doubt, experiment with different Parallelism values and use
+the one that works best.
 
 =item BufferSize => $bytes
 
@@ -780,6 +824,9 @@ replies arrive at the same time, then the operating system may discard
 the ping replies and mistakenly cause this component to believe the
 ping to have timed out. In this case, you will typically see discards
 being noted in the counters displayed by 'netstat -s'.
+
+Increased BufferSize values can expand the practical limit for
+Parallelism.
 
 =item AlwaysDecodeAddress => 0|1
 
