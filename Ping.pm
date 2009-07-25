@@ -1,5 +1,6 @@
 # $Id$
 # License and documentation are after __END__.
+# vim: set ts=2 sw=2 expandtab
 
 package POE::Component::Client::Ping;
 
@@ -143,8 +144,8 @@ sub poco_ping_start {
   $heap->{outstanding}   = 0;   # How many pings are we awaiting replies for
 
   if (defined $socket) {
-    # root is needed for this step too
-    $kernel->select_read($heap->{socket_handle} = $socket, 'got_pong');
+    # Root is needed for this step too.
+    $heap->{socket_handle} = $socket;
     $heap->{keep_socket}   = 1;
   }
   else {
@@ -180,15 +181,26 @@ sub create_handle {
 
   $heap->{socket_handle} = $socket;
 
+  _setup_handle($kernel, $heap);
+}
+
+### NOT A POE EVENT HANDLER
+sub _setup_handle {
+  my ($kernel, $heap) = @_;
+
   if ($heap->{rcvbuf}) {
     unless (
-      setsockopt($socket, SOL_SOCKET, SO_RCVBUF, pack("I", $heap->{rcvbuf}))
+      setsockopt(
+        $heap->{socket_handle}, SOL_SOCKET,
+        SO_RCVBUF, pack("I", $heap->{rcvbuf})
+      )
     ) {
         warn("setsockopt rcvbuf size ($heap->{rcvbuf}) failed: $!");
     }
   }
+
   if ($heap->{parallelism} && $heap->{parallelism} == -1) {
-    my $rcvbuf = getsockopt($socket, SOL_SOCKET, SO_RCVBUF);
+    my $rcvbuf = getsockopt($heap->{socket_handle}, SOL_SOCKET, SO_RCVBUF);
     if ($rcvbuf) {
       my $size = unpack("I", $rcvbuf);
       my $max_parallel = int($size / $PKTSIZE);
@@ -202,7 +214,7 @@ sub create_handle {
     }
   }
 
-  $kernel->select_read($heap->{socket_handle} = $socket, 'got_pong');
+  $kernel->select_read($heap->{socket_handle}, 'got_pong');
 }
 
 # Request a ping.  This code borrows heavily from Net::Ping.
@@ -225,8 +237,15 @@ sub poco_ping_ping {
 
   DEBUG and warn "ping requested for $address\n";
 
-  # No current pings.  Open a socket.
-  create_handle($kernel, $heap) unless (exists $heap->{socket_handle});
+  # No current pings.  Open a socket, or setup the existing one.
+  unless (scalar(keys %{$heap->{ping_by_seq}})) {
+    unless (exists $heap->{socket_handle}) {
+      create_handle($kernel, $heap);
+    }
+    else {
+      _setup_handle($kernel, $heap);
+    }
+  }
 
   # Get the timeout, or default to the one set for the component.
   $timeout = $heap->{timeout} unless defined $timeout and $timeout > 0;
@@ -475,9 +494,13 @@ sub poco_ping_clear {
 # Check to see if no more pings are waiting.  Close the socket if so.
 sub _check_for_close {
   my ($kernel, $heap) = @_;
-  unless (scalar(keys %{$heap->{ping_by_seq}}) || $heap->{keep_socket}) {
-    DEBUG_SOCKET and warn "closing the raw icmp socket";
-    $kernel->select_read( delete $heap->{socket_handle} );
+  unless (scalar(keys %{$heap->{ping_by_seq}})) {
+    DEBUG_SOCKET and warn "stopping raw socket watcher";
+    $kernel->select_read( $heap->{socket_handle} );
+    unless ($heap->{keep_socket}) {
+      DEBUG_SOCKET and warn "closing raw socket";
+      delete $heap->{socket_handle};
+    }
   }
 }
 
@@ -963,7 +986,7 @@ None currently known.
 
 =head1 AUTHOR & COPYRIGHTS
 
-POE::Component::Client::Ping is Copyright 1999-2004 by Rocco Caputo.
+POE::Component::Client::Ping is Copyright 1999-2009 by Rocco Caputo.
 All rights are reserved.  POE::Component::Client::Ping is free
 software; you may redistribute it and/or modify it under the same
 terms as Perl itself.

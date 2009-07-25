@@ -6,3 +6,4 @@ Ping.pm
 README
 t/01_ping.t
 t/02_arbitrary_data.t
+t/03_provided_socket.t
