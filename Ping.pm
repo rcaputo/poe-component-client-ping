@@ -980,9 +980,17 @@ POE works.
 Also see the test program, t/01_ping.t, in the component's
 distribution.
 
-=head1 BUGS
+=head1 BUG TRACKER
 
-None currently known.
+https://rt.cpan.org/Dist/Display.html?Status=Active&Queue=POE-Component-Client-Ping
+
+=head1 REPOSITORY
+
+http://thirdlobe.com/svn/poco-client-ping/
+
+=head1 OTHER RESOURCES
+
+http://search.cpan.org/dist/POE-Component-Client-Ping/
 
 =head1 AUTHOR & COPYRIGHTS
 
@@ -991,8 +999,6 @@ All rights are reserved.  POE::Component::Client::Ping is free
 software; you may redistribute it and/or modify it under the same
 terms as Perl itself.
 
-Rocco may be contacted by e-mail via <rcaputo@cpan.org>.
-
-You can learn more about POE at <http://poe.perl.org/>.
+You can learn more about POE at http://poe.perl.org/
 
 =cut

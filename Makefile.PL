@@ -12,7 +12,12 @@ WriteMakefile(
   ABSTRACT     => 'POE component for non-blocking/concurrent ICMP ping.',
   LICENSE      => 'perl',
   VERSION_FROM => 'Ping.pm',
-
+  META_ADD     => {
+    resources  => {
+      license    => 'http://dev.perl.org/licenses/',
+      repository => 'http://thirdlobe.com/svn/poco-client-ping/trunk'
+    },
+  },
   PM           => { 'Ping.pm'   => '$(INST_LIBDIR)/Ping.pm' },
   PREREQ_PM    => {
     POE         => 0.11,
