@@ -20,8 +20,8 @@ WriteMakefile(
   },
   PM           => { 'Ping.pm'   => '$(INST_LIBDIR)/Ping.pm' },
   PREREQ_PM    => {
-    POE         => 0.11,
-    Time::HiRes => 1.20,
+    'POE'         => 1.007,
+    'Time::HiRes' => 1.20,
   },
   dist         => {
     COMPRESS   => 'gzip -9f',
