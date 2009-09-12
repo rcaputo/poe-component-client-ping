@@ -413,6 +413,10 @@ sub _send_packet {
   DEBUG_PBS and warn "recording ping_by_seq($seq)";
   if ($optpostback) {
     $heap->{ping_by_seq}->{$seq} = $optpostback;
+
+    # If retries, set the request time to the new/actual request time.
+    # Inserted by Ralph Schmitt 2009-09-12.
+    $optpostback->[PBS_REQUEST_TIME] = time();
   }
   else {
     $heap->{ping_by_seq}->{$seq} = [
