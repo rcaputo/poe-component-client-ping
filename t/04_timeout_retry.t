@@ -8,7 +8,7 @@ use warnings;
 use strict;
 use POE qw(Component::Client::Ping);
 
-use Test::More tests => 3;
+use Test::More tests => 2;
 
 POE::Component::Client::Ping->spawn(
 	Alias               => "pingthing",  # defaults to "pinger"
@@ -25,6 +25,7 @@ POE::Session->create(
 		pong => sub {
 			my ($req, $rsp) = @_[ARG0, ARG1];
 			my $round_trip = $rsp->[1];
+			return unless defined $round_trip; # final timeout
 			ok( $round_trip < 1, "response time not affected by timeout" );
 		},
 	},

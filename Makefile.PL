@@ -10,14 +10,13 @@ WriteMakefile(
   AUTHOR       => 'Rocco Caputo <rcaputo@cpan.org>',
   ABSTRACT     => 'POE component for non-blocking/concurrent ICMP ping.',
   LICENSE      => 'perl',
-  VERSION_FROM => 'Ping.pm',
+  VERSION_FROM => 'lib/POE/Component/Client/Ping.pm',
   META_ADD     => {
     resources  => {
       license    => 'http://dev.perl.org/licenses/',
       repository => 'http://github.com/rcaputo/poe-component-client-ping/'
     },
   },
-  PM           => { 'Ping.pm'   => '$(INST_LIBDIR)/Ping.pm' },
   PREREQ_PM    => {
     'POE'         => 1.007,
     'Time::HiRes' => 1.20,
