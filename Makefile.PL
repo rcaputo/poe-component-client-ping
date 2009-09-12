@@ -1,5 +1,4 @@
 #!/usr/bin/perl
-# $Id$
 
 use ExtUtils::MakeMaker;
 
@@ -15,7 +14,7 @@ WriteMakefile(
   META_ADD     => {
     resources  => {
       license    => 'http://dev.perl.org/licenses/',
-      repository => 'http://thirdlobe.com/svn/poco-client-ping/trunk'
+      repository => 'http://github.com/rcaputo/poe-component-client-ping/'
     },
   },
   PM           => { 'Ping.pm'   => '$(INST_LIBDIR)/Ping.pm' },
@@ -27,8 +26,7 @@ WriteMakefile(
     COMPRESS   => 'gzip -9f',
     SUFFIX     => 'gz',
     PREOP      => (
-      'svn-log.perl --repo https://thirdlobe.com/svn/poco-client-ping| ' .
-      'tee ./$(DISTNAME)-$(VERSION)/CHANGES > ./CHANGES'
+      'git-log.pl | tee ./$(DISTNAME)-$(VERSION)/CHANGES > ./CHANGES'
     ),
   },
 );

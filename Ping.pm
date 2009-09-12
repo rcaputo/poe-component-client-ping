@@ -1,4 +1,3 @@
-# $Id$
 # License and documentation are after __END__.
 # vim: set ts=2 sw=2 expandtab
 
@@ -982,11 +981,11 @@ distribution.
 
 =head1 BUG TRACKER
 
-https://rt.cpan.org/Dist/Display.html?Status=Active&Queue=POE-Component-Client-Ping
+https://rt.cpan.org/Dist/Display.html?Queue=POE-Component-Client-Ping
 
 =head1 REPOSITORY
 
-http://thirdlobe.com/svn/poco-client-ping/
+http://github.com/rcaputo/poe-component-client-ping/
 
 =head1 OTHER RESOURCES
 

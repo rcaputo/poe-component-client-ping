@@ -1,5 +1,4 @@
 #!/usr/bin/perl -w
-# $Id: 01_ping.t 49 2006-08-03 14:32:09Z rcaputo $
 # vim: filetype=perl ts=2 sw=2 expandtab
 
 use strict;
