@@ -68,7 +68,6 @@ sub ICMP_FLAGS     () { 0 }
 sub ICMP_PORT      () { 0 }
 
 # "Static" variables which will be shared across multiple instances.
-# Also multiple processes.
 
 my $master_seq = 0;
 
@@ -130,7 +129,7 @@ sub spawn {
       keep_socket   => (defined $socket) || 0,
       onereply      => $onereply,
       rcvbuf        => $rcvbuf,
-      retry         => $retry,
+      retry         => $retry // 0,
       socket_handle => $socket,
       timeout       => $timeout,
 
@@ -343,6 +342,7 @@ sub _do_ping {
     $event,             # PEND_EVENT
     $address,           # PEND_ADDR ???
     $timeout,           # PEND_TIMEOUT
+    $is_a_retry,        # PEND_IS_RETRY
   ];
 
   if ($tries_left and $tries_left > 1) {
@@ -355,12 +355,12 @@ sub _do_ping {
     ];
   }
 
-  _send_packet($kernel, $heap, $is_a_retry);
+  _send_next_packet($kernel, $heap);
 }
 
 
-sub _send_packet {
-  my ($kernel, $heap, $is_a_retry) = @_;
+sub _send_next_packet {
+  my ($kernel, $heap) = @_;
   return unless (scalar @{$heap->{queue}});
 
   if ($heap->{parallelism} && $heap->{outstanding} >= $heap->{parallelism}) {
@@ -386,6 +386,7 @@ sub _send_packet {
     $event,             # PEND_EVENT
     $address,           # PEND_ADDR ???
     $timeout,           # PEND_TIMEOUT
+    $is_a_retry,        # PEND_IS_RETRY
   ) = @$ping_info;
 
   # Send the packet.  If send() fails, then we bail with an error.
@@ -443,10 +444,14 @@ sub _send_packet {
 
   # Duplicate pings?  Forcibly time out the previous one.
   if (exists $heap->{addr_to_seq}->{$sender}->{$address}) {
+    DEBUG and warn "Duplicate ping. Canceling $address";
+
     my $now = time();
-    my $old_seq = delete $heap->{addr_to_seq}->{$sender}->{$address};
-    my $old_info = delete $heap->{ping_by_seq}->{$old_seq};
-    $old_info->[PBS_POSTBACK]->( undef, undef, $now, undef );
+    my $ping_info = _end_ping_by_requester_and_address(
+      $kernel, $heap, $sender, $address
+    );
+
+    $ping_info->[PBS_POSTBACK]->( undef, undef, $now, undef );
   }
 
   $heap->{addr_to_seq}->{$sender}->{$address} = $seq;
@@ -544,12 +549,12 @@ sub _end_ping_by_requester_and_address {
 
   # Discard the postback for the discarded sequence number.
   DEBUG_PBS and warn "removing ping_by_seq($seq)";
-  delete $heap->{ping_by_seq}->{$seq};
+  my $ping_info = delete $heap->{ping_by_seq}->{$seq};
   $kernel->delay($seq);
 
   $heap->{outstanding}--;
 
-  return;
+  return $ping_info;
 }
 
 
@@ -640,7 +645,7 @@ sub poco_ping_pong {
   # It's a single-reply ping.  Clean up after it.
   if ($heap->{onereply}) {
     _end_ping_by_sequence($kernel, $heap, $from_seq);
-    _send_packet($kernel, $heap, 0);
+    _send_next_packet($kernel, $heap);
     _check_for_close($kernel, $heap);
   }
 }
@@ -676,7 +681,7 @@ sub poco_ping_default {
   # Post a timer tick back to the session.  This marks the end of
   # the request/response transaction.
   $ping_info->[PBS_POSTBACK]->( undef, undef, $now, undef );
-  _send_packet($kernel, $heap, 0);
+  _send_next_packet($kernel, $heap);
   _check_for_close($kernel, $heap);
 
   return;
@@ -1002,8 +1007,8 @@ This is the ttl for the echo response packet we received.
 If the ":const" tagset is imported the following constants will be
 exported:
 
-REQ_ADDRESS, REQ_TIMEOUT, REQ_TIME
-REQ_USER_ARGS, RES_ADDRESS, RES_ROUNDTRIP, RES_TIME, RES_TTL
+REQ_ADDRESS, REQ_TIMEOUT, REQ_TIME REQ_USER_ARGS,
+RES_ADDRESS, RES_ROUNDTRIP, RES_TIME, RES_TTL
 
 =head1 SEE ALSO
 
