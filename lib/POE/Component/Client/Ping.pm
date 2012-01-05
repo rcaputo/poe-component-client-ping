@@ -1,5 +1,5 @@
 # License and documentation are after __END__.
-# vim: set ts=2 sw=2 expandtab
+# vim: ts=2 sw=2 expandtab
 
 package POE::Component::Client::Ping;
 
@@ -122,28 +122,28 @@ sub spawn {
       got_pong => \&poco_ping_pong,
       _default => \&poco_ping_default,
     },
-		heap => {
-			alias         => $alias,
-			always_decode => $always_decode,
-			data          => $payload,
-			data_size     => length($payload),
-			keep_socket   => (defined $socket) || 0,
-			onereply      => $onereply,
-			rcvbuf        => $rcvbuf,
-			retry         => $retry,
-			socket_handle => $socket,
-			timeout       => $timeout,
+    heap => {
+      alias         => $alias,
+      always_decode => $always_decode,
+      data          => $payload,
+      data_size     => length($payload),
+      keep_socket   => (defined $socket) || 0,
+      onereply      => $onereply,
+      rcvbuf        => $rcvbuf,
+      retry         => $retry,
+      socket_handle => $socket,
+      timeout       => $timeout,
 
-			# Active query tracking.
-			ping_by_seq   => { },  # keyed on sequence number
-			addr_to_seq   => { },  # keyed on request address, then sender
+      # Active query tracking.
+      ping_by_seq   => { },  # keyed on sequence number
+      addr_to_seq   => { },  # keyed on request address, then sender
 
-			# Queue to manage throttling.
-			parallelism   => $parallelism, # how many pings can we send at once
-			queue         => [ ], # ordered list of throttled pings
-			pending       => { }, # data for the sequence ids of queued pings
-			outstanding   => 0,   # How many pings are we awaiting replies for
-		},
+      # Queue to manage throttling.
+      parallelism   => $parallelism, # how many pings can we send at once
+      queue         => [ ], # ordered list of throttled pings
+      pending       => { }, # data for the sequence ids of queued pings
+      outstanding   => 0,   # How many pings are we awaiting replies for
+    },
   );
 
   undef;
@@ -153,7 +153,7 @@ sub spawn {
 # Start the pinger session.
 
 sub poco_ping_start {
-	$_[KERNEL]->alias_set( $_[HEAP]->{alias} );
+  $_[KERNEL]->alias_set( $_[HEAP]->{alias} );
 }
 
 
@@ -178,6 +178,7 @@ sub _create_handle {
 }
 
 ### NOT A POE EVENT HANDLER
+
 sub _setup_handle {
   my ($kernel, $heap) = @_;
 
