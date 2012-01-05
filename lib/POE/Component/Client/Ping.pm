@@ -11,14 +11,14 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS);
 
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(
-  REQ_ADDRESS REQ_TIMEOUT REQ_TIME REQ_USER_ARGS RES_ADDRESS
-  RES_ROUNDTRIP RES_TIME RES_TTL
+  REQ_ADDRESS REQ_TIMEOUT REQ_TIME REQ_USER_ARGS
+  RES_ADDRESS RES_ROUNDTRIP RES_TIME RES_TTL
 );
 %EXPORT_TAGS = (
   const => [
     qw(
-      REQ_ADDRESS REQ_TIMEOUT REQ_TIME REQ_USER_ARGS RES_ADDRESS
-      RES_ROUNDTRIP RES_TIME RES_TTL
+      REQ_ADDRESS REQ_TIMEOUT REQ_TIME REQ_USER_ARGS
+      RES_ADDRESS RES_ROUNDTRIP RES_TIME RES_TTL
     )
   ]
 );
@@ -37,6 +37,40 @@ use POE::Session;
 sub DEBUG        () { 0 } # Enable more information.
 sub DEBUG_SOCKET () { 0 } # Watch the socket open and close.
 sub DEBUG_PBS    () { 0 } # Watch ping_by_seq management.
+
+# ping_by_seq structure offsets.
+
+sub PBS_POSTBACK     () { 0 };
+sub PBS_SESSION      () { 1 };
+sub PBS_ADDRESS      () { 2 };
+sub PBS_REQUEST_TIME () { 3 };
+
+# request_packet offsets
+sub REQ_ADDRESS       () { 0 };
+sub REQ_TIMEOUT       () { 1 };
+sub REQ_TIME          () { 2 };
+sub REQ_USER_ARGS     () { 3 };
+
+# response_packet offsets
+sub RES_ADDRESS       () { 0 };
+sub RES_ROUNDTRIP     () { 1 };
+sub RES_TIME          () { 2 };
+sub RES_TTL           () { 3 };
+
+# ICMP echo constants. Types, structures, and fields.  Cribbed
+# mercilessly from Net::Ping.
+
+sub ICMP_ECHOREPLY () { 0 }
+sub ICMP_ECHO      () { 8 }
+sub ICMP_STRUCT    () { 'C2 S3 A' }
+sub ICMP_SUBCODE   () { 0 }
+sub ICMP_FLAGS     () { 0 }
+sub ICMP_PORT      () { 0 }
+
+# "Static" variables which will be shared across multiple instances.
+# Also multiple processes.
+
+my $master_seq = 0;
 
 # Spawn a new PoCo::Client::Ping session.  This basically is a
 # constructor, but it isn't named "new" because it doesn't create a
@@ -115,28 +149,6 @@ sub spawn {
   undef;
 }
 
-# ping_by_seq structure offsets.
-
-sub PBS_POSTBACK     () { 0 };
-sub PBS_SESSION      () { 1 };
-sub PBS_ADDRESS      () { 2 };
-sub PBS_REQUEST_TIME () { 3 };
-
-# request_packet offsets
-sub REQ_ADDRESS       () { 0 };
-sub REQ_TIMEOUT       () { 1 };
-sub REQ_TIME          () { 2 };
-sub REQ_USER_ARGS     () { 3 };
-
-# response_packet offsets
-sub RES_ADDRESS       () { 0 };
-sub RES_ROUNDTRIP     () { 1 };
-sub RES_TIME          () { 2 };
-sub RES_TTL           () { 3 };
-
-# "Static" variables which will be shared across multiple instances.
-
-my $master_seq = 0;
 
 # Start the pinger session.
 
@@ -144,20 +156,12 @@ sub poco_ping_start {
 	$_[KERNEL]->alias_set( $_[HEAP]->{alias} );
 }
 
-# ICMP echo constants. Types, structures, and fields.  Cribbed
-# mercilessly from Net::Ping.
-
-sub ICMP_ECHOREPLY () { 0 }
-sub ICMP_ECHO      () { 8 }
-sub ICMP_STRUCT    () { 'C2 S3 A' }
-sub ICMP_SUBCODE   () { 0 }
-sub ICMP_FLAGS     () { 0 }
-sub ICMP_PORT      () { 0 }
 
 # (NOT A POE EVENT HANDLER)
 # Create a raw socket to send ICMP packets down.
 # (optionally) mess with the size of the buffers on the socket.
-sub create_handle {
+
+sub _create_handle {
   my ($kernel, $heap) = @_;
   DEBUG_SOCKET and warn "opening a raw socket for icmp";
 
@@ -211,25 +215,32 @@ sub _setup_handle {
 sub poco_ping_ping {
   my (
     $kernel, $heap, $sender,
-    $event, $address, $timeout, $retry, $optpostback
+    $event, $address, $timeout, $tries_left
   ) = @_[
     KERNEL, HEAP, SENDER,
-    ARG0, ARG1, ARG2, ARG3, ARG4
+    ARG0, ARG1, ARG2, ARG3
   ];
 
-  # When doing retries, the pinger session will request the ping and
-  # therefore the sender info is bogus. So, for retries we stash all the
-  # original information away and pass it back in via the optpostback param.
-  if ($optpostback) {
-    $sender = $optpostback->[PBS_SESSION];
-  }
+  $tries_left //= $heap->{retry};
 
-  DEBUG and warn "ping requested for $address\n";
+  DEBUG and warn "ping requested for $address ($tries_left try/tries left)\n";
+
+  _do_ping(
+    $kernel, $heap, $sender, $event, $address, $timeout, $tries_left, 0
+  );
+}
+
+
+sub _do_ping {
+  my (
+    $kernel, $heap, $sender, $event, $address, $timeout, $tries_left,
+    $is_a_retry
+  ) = @_;
 
   # No current pings.  Open a socket, or setup the existing one.
   unless (scalar(keys %{$heap->{ping_by_seq}})) {
     unless (defined $heap->{socket_handle}) {
-      create_handle($kernel, $heap);
+      _create_handle($kernel, $heap);
     }
     else {
       _setup_handle($kernel, $heap);
@@ -238,7 +249,7 @@ sub poco_ping_ping {
 
   # Get the timeout, or default to the one set for the component.
   $timeout = $heap->{timeout} unless defined $timeout and $timeout > 0;
-  $retry = $heap->{retry} unless defined $retry;
+  $tries_left = $heap->{retry} unless defined $tries_left;
 
   # Find an unused sequence number.
   while (1) {
@@ -251,7 +262,8 @@ sub poco_ping_ping {
   # Build the message without a checksum.
   my $msg = pack(
     ICMP_STRUCT . $heap->{data_size},
-    ICMP_ECHO, ICMP_SUBCODE, $checksum, ($$ & 0xFFFF), $master_seq, $heap->{data}
+    ICMP_ECHO, ICMP_SUBCODE,
+    $checksum, ($$ & 0xFFFF), $master_seq, $heap->{data}
   );
 
   ### Begin checksum calculation section.
@@ -274,7 +286,8 @@ sub poco_ping_ping {
   # Rebuild the message with the checksum this time.
   $msg = pack(
     ICMP_STRUCT . $heap->{data_size},
-    ICMP_ECHO, ICMP_SUBCODE, $checksum, ($$ & 0xFFFF), $master_seq, $heap->{data}
+    ICMP_ECHO, ICMP_SUBCODE, $checksum, ($$ & 0xFFFF), $master_seq,
+    $heap->{data}
   );
 
   # Record information about the ping request.
@@ -288,6 +301,9 @@ sub poco_ping_ping {
   }
 
   # Build an address to send the ping at.
+  # TODO - This blocks, so resolve them first.
+  # TODO - This assumes four-octet addresses are IPv4.
+
   my $usable_address = $address;
   if ($heap->{always_decode} || length($address) != 4) {
     $usable_address = inet_aton($address);
@@ -295,18 +311,21 @@ sub poco_ping_ping {
 
   # Return failure if an address was not resolvable.  This simulates
   # the postback behavior.
+
   unless (defined $usable_address) {
     $kernel->post(
       $sender, $event_name,
-      [ $address,    # REQ_ADDRESS
-        $timeout,    # REQ_TIMEOUT
-        time(),      # REQ_TIME
-        @user_args,  # REQ_USER_ARGS
-      ],
-      [ undef,   # RES_ADDRESS
-        undef,   # RES_ROUNDTRIP
-        time(),  # RES_TIME
-        undef,   # RES_TTL
+      [
+        $address,   # REQ_ADDRESS
+        $timeout,   # REQ_TIMEOUT
+        time(),     # REQ_TIME
+        @user_args, # REQ_USER_ARGS
+        ],
+        [
+        undef,      # RES_ADDRESS
+        undef,      # RES_ROUNDTRIP
+        time(),     # RES_TIME
+        undef,      # RES_TTL
       ],
     );
     _check_for_close($kernel, $heap);
@@ -323,24 +342,24 @@ sub poco_ping_ping {
     $event,             # PEND_EVENT
     $address,           # PEND_ADDR ???
     $timeout,           # PEND_TIMEOUT
-    $optpostback,       # PEND_OPTPOSTBACK
   ];
 
-  if ($retry && $retry > 1) {
+  if ($tries_left and $tries_left > 1) {
     $heap->{retrydata}->{$master_seq} = [
-      $sender,    # RD_SENDER
-      $event,     # RD_EVENT
-      $address,   # RD_ADDRESS
-      $timeout,   # RD_TIMEOUT
-      $retry,     # RD_RETRY
+      $sender,     # RD_SENDER
+      $event,      # RD_EVENT
+      $address,    # RD_ADDRESS
+      $timeout,    # RD_TIMEOUT
+      $tries_left, # RD_RETRY
     ];
   }
 
-  _send_packet($kernel, $heap);
+  _send_packet($kernel, $heap, $is_a_retry);
 }
 
+
 sub _send_packet {
-  my ($kernel, $heap) = @_;
+  my ($kernel, $heap, $is_a_retry) = @_;
   return unless (scalar @{$heap->{queue}});
 
   if ($heap->{parallelism} && $heap->{outstanding} >= $heap->{parallelism}) {
@@ -366,7 +385,6 @@ sub _send_packet {
     $event,             # PEND_EVENT
     $address,           # PEND_ADDR ???
     $timeout,           # PEND_TIMEOUT
-    $optpostback,       # PEND_OPTPOSTBACK
   ) = @$ping_info;
 
   # Send the packet.  If send() fails, then we bail with an error.
@@ -401,12 +419,10 @@ sub _send_packet {
   $kernel->delay( $seq => $timeout );
 
   DEBUG_PBS and warn "recording ping_by_seq($seq)";
-  if ($optpostback) {
-    $heap->{ping_by_seq}->{$seq} = $optpostback;
-
+  if ($is_a_retry) {
     # If retries, set the request time to the new/actual request time.
     # Inserted by Ralph Schmitt 2009-09-12.
-    $optpostback->[PBS_REQUEST_TIME] = time();
+    $heap->{ping_by_seq}->{$seq}->[PBS_REQUEST_TIME] = time();
   }
   else {
     $heap->{ping_by_seq}->{$seq} = [
@@ -451,7 +467,7 @@ sub poco_ping_clear {
 
   # No address was specified.  Clear all the pings for this session.
   else {
-    _end_pings_by_requester($sender);
+    _end_pings_by_requester($kernel, $heap, $sender);
   }
 
   _check_for_close($kernel, $heap);
@@ -462,6 +478,8 @@ sub poco_ping_clear {
 
 sub _check_for_close {
   my ($kernel, $heap) = @_;
+
+  return unless exists $heap->{socket_handle};
 
   return if scalar keys %{$heap->{ping_by_seq}};
 
@@ -535,7 +553,7 @@ sub _end_ping_by_requester_and_address {
 
 
 sub _end_pings_by_requester {
-  my ($kernel, $heap, $sender, $address) = @_;
+  my ($kernel, $heap, $sender) = @_;
 
   return unless exists $heap->{addr_to_seq}->{$sender};
   my $addr_to_seq_rec = delete $heap->{addr_to_seq}->{$sender};
@@ -621,7 +639,7 @@ sub poco_ping_pong {
   # It's a single-reply ping.  Clean up after it.
   if ($heap->{onereply}) {
     _end_ping_by_sequence($kernel, $heap, $from_seq);
-    _send_packet($kernel, $heap);
+    _send_packet($kernel, $heap, 0);
     _check_for_close($kernel, $heap);
   }
 }
@@ -649,17 +667,15 @@ sub poco_ping_default {
   my $retryinfo = delete $heap->{retrydata}->{$seq};
   if ($retryinfo) {
     my ($sender, $event, $address, $timeout, $remaining) = @{$retryinfo};
-    DEBUG and warn("retrying ping for $address\n");
-    $kernel->yield(
-      "ping", $event, $address, $timeout, $remaining-1, $ping_info
-    );
+    DEBUG and warn("retrying ping for $address (", $remaining - 1, ")\n");
+    _do_ping($kernel, $heap, $sender, $event, $address, $remaining - 1, 1);
     return;
   }
 
   # Post a timer tick back to the session.  This marks the end of
   # the request/response transaction.
   $ping_info->[PBS_POSTBACK]->( undef, undef, $now, undef );
-  _send_packet($kernel, $heap);
+  _send_packet($kernel, $heap, 0);
   _check_for_close($kernel, $heap);
 
   return;

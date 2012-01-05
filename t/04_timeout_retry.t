@@ -4,6 +4,13 @@
 # round-trip time.  Thanks to Ralph Schmitt, who reported this
 # problem.
 
+# Unfortunately this test relies upon the assumption that one can ping
+# 127.0.0.1.  If you're on Mac OS X 10.5 for example, turn off
+# "stealth mode":
+#
+# System Preferences > Security > Firewall > Advanced > disable
+# "Enable stealth mode".
+
 use warnings;
 use strict;
 
