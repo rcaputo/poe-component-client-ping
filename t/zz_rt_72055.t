@@ -20,6 +20,14 @@
 use strict;
 use warnings;
 
+BEGIN {
+  $| = 1;
+  if ($> and ($^O ne 'VMS')) {
+    print "1..0 # skipped: ICMP ping requires root privilege\n";
+    exit 0;
+  }
+};
+
 use Test::More tests => 2;
 
 use POE qw( Component::Client::Ping );
