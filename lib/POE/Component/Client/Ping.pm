@@ -24,7 +24,7 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS);
 );
 
 use vars qw($VERSION $PKTSIZE);
-$VERSION = '1.171';
+$VERSION = '1.173';
 $PKTSIZE = $^O eq 'linux' ? 3_000 : 100;
 
 use Carp qw(croak);
@@ -129,7 +129,7 @@ sub spawn {
       keep_socket   => (defined $socket) || 0,
       onereply      => $onereply,
       rcvbuf        => $rcvbuf,
-      retry         => $retry // 0,
+      retry         => $retry || 0,
       socket_handle => $socket,
       timeout       => $timeout,
 
@@ -221,7 +221,7 @@ sub poco_ping_ping {
     ARG0, ARG1, ARG2, ARG3
   ];
 
-  $tries_left //= $heap->{retry};
+  $tries_left ||= $heap->{retry};
 
   DEBUG and warn "ping requested for $address ($tries_left try/tries left)\n";
 
