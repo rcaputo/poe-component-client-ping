@@ -1,8 +1,9 @@
 CHANGES
 MANIFEST
 Makefile.PL
-lib/POE/Component/Client/Ping.pm
 README
+eg/test-subnet.pl
+lib/POE/Component/Client/Ping.pm
 t/00_info.t
 t/01_ping.t
 t/02_arbitrary_data.t
