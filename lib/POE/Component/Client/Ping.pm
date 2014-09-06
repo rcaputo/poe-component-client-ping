@@ -164,8 +164,7 @@ sub _create_handle {
   my ($kernel, $heap) = @_;
   DEBUG_SOCKET and warn "opening a raw socket for icmp";
 
-  my $protocol = (getprotobyname('icmp'))[2]
-    or die "can't get icmp protocol by name: $!";
+  my $protocol = Socket::IPPROTO_ICMP;
 
   my $socket = gensym();
   socket($socket, PF_INET, SOCK_RAW, $protocol)
