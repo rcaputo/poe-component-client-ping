@@ -673,7 +673,10 @@ sub poco_ping_default {
   if ($retryinfo) {
     my ($sender, $event, $address, $timeout, $remaining) = @{$retryinfo};
     DEBUG and warn("retrying ping for $address (", $remaining - 1, ")\n");
-    _do_ping($kernel, $heap, $sender, $event, $address, $remaining - 1, 1);
+    _do_ping(
+      $kernel, $heap, $sender, $event, $address, $timeout,
+      $remaining - 1, 1
+    );
     return;
   }
 
