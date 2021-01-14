@@ -601,7 +601,7 @@ sub poco_ping_pong {
     warn ",----- packet from ", inet_ntoa($from_ip), ", port $from_port\n";
     warn "| type = $from_type / subtype = $from_subcode\n";
     warn "| checksum = $from_checksum, pid = $from_pid, seq = $from_seq\n";
-    warn "| message: $from_message\n";
+    warn "| message: ", unpack("H*", $from_message), "\n";
     warn "`------------------------------------------------------------\n";
   };
 
